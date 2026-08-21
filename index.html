@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Who Am I</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Orbitron for the cool, futuristic main text, Space Grotesk for sleek subtitles -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Grotesk:wght@300;500&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #030008; /* Deep space black/purple */
+            color: white;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        /* Galaxy background gradient overlay */
+        .galaxy-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, rgba(30, 10, 60, 0.5) 0%, rgba(0, 0, 0, 1) 100%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Canvas needs to be behind UI but able to draw effects */
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Interactive UI container */
+        .ui-layer {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Modern button styling with glow */
+        .btn-whoami {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(120, 0, 255, 0.2), inset 0 0 10px rgba(255,255,255,0.1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 4px;
+        }
+
+        .btn-whoami:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.6);
+            box-shadow: 0 0 40px rgba(150, 100, 255, 0.6), inset 0 0 20px rgba(255,255,255,0.3);
+            transform: scale(1.05);
+            text-shadow: 0 0 8px rgba(255,255,255,0.8);
+        }
+
+        .btn-whoami:active {
+            transform: scale(0.95);
+        }
+
+        /* Typography for the reveal text */
+        .name-text {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: clamp(3rem, 10vw, 8rem);
+            background: linear-gradient(180deg, #ffffff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.5));
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .subtitle-text {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 300;
+            font-size: clamp(1rem, 3vw, 2rem);
+            letter-spacing: 0.5em;
+            color: #a5b4fc;
+            text-transform: uppercase;
+            margin-top: 1rem;
+            opacity: 0.8;
+        }
+
+        /* Utility classes for smooth transitions */
+        .fade-out {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+        }
+
+        .reveal-container {
+            opacity: 0;
+            transform: scale(0.5) translateY(50px);
+            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .reveal-active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Galaxy atmospheric gradient -->
+    <div class="galaxy-bg"></div>
+    
+    <!-- Canvas for stars and explosion particles -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- Main UI overlay -->
+    <div class="ui-layer">
+        
+        <!-- The Initial Button -->
+        <button id="whoami-btn" class="btn-whoami px-10 py-5 rounded-full text-xl md:text-2xl text-white cursor-pointer z-20">
+            WHOAMI
+        </button>
+
+        <!-- The Hidden Reveal Text -->
+        <div id="reveal-content" class="reveal-container z-20">
+            <h1 class="name-text">Mayank</h1>
+            <h2 class="subtitle-text">Coming Soon</h2>
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let particles = [];
+        let stars = [];
+        let animationFrameId;
+
+        // Resize handler to ensure canvas fits window dynamically
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Star {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 1.5;
+                this.baseAlpha = Math.random() * 0.5 + 0.1;
+                this.alpha = this.baseAlpha;
+                this.pulseSpeed = Math.random() * 0.02 + 0.01;
+                this.angle = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                // Gentle pulsing effect for background stars
+                this.angle += this.pulseSpeed;
+                this.alpha = this.baseAlpha + Math.sin(this.angle) * 0.2;
+                if (this.alpha < 0) this.alpha = 0;
+                
+                // Slow drift
+                this.y -= 0.1;
+                if (this.y < 0) {
+                    this.y = height;
+                    this.x = Math.random() * width;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                ctx.fill();
+            }
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                
+                // Blast properties: 360 degree explosion
+                const angle = Math.random() * Math.PI * 2;
+                
+                // Randomize speed for depth effect
+                const speed = Math.random() * 15 + 5; 
+                
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                
+                // White particles with varying sizes
+                this.size = Math.random() * 3 + 1;
+                this.alpha = 1;
+                
+                // Friction to slow them down after initial blast
+                this.friction = 0.92;
+                // Gravity for a slight fall-off effect
+                this.gravity = 0.1;
+                // How fast they fade out
+                this.decay = Math.random() * 0.015 + 0.015;
+            }
+
+            update() {
+                // Apply friction and gravity
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                this.vy += this.gravity;
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Fade out
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                
+                // Adding a glowing trail effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffffff';
+                
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function initStars() {
+            const starCount = Math.floor((width * height) / 4000); // Responsive star count
+            for (let i = 0; i < starCount; i++) {
+                stars.push(new Star());
+            }
+        }
+
+        function animate() {
+            // Clear canvas with a slight trail effect (alpha 0.3 instead of 1)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Update and draw background stars
+            stars.forEach(star => {
+                star.update();
+                star.draw();
+            });
+
+            // Update and draw explosion particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                // Remove dead particles
+                if (particles[i].alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        const btn = document.getElementById('whoami-btn');
+        const revealContent = document.getElementById('reveal-content');
+
+        btn.addEventListener('click', (e) => {
+            // Get button center coordinates for the explosion origin
+            const rect = btn.getBoundingClientRect();
+            const startX = rect.left + rect.width / 2;
+            const startY = rect.top + rect.height / 2;
+
+            // Generate blast particles (dense explosion)
+            for (let i = 0; i < 200; i++) {
+                particles.push(new Particle(startX, startY));
+            }
+
+            // Generate some extra bright flash effect right at the center
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(startX, startY, 50, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hide the button smoothly
+            btn.style.opacity = '0';
+            btn.style.transform = 'scale(0.5)';
+            btn.style.pointerEvents = 'none';
+
+            // Show the "Mayank" text with a slight delay so the explosion grabs attention first
+            setTimeout(() => {
+                btn.style.display = 'none'; // completely remove from layout flow
+                revealContent.classList.add('reveal-active');
+            }, 300);
+        });
+
+        window.onload = () => {
+            initStars();
+            animate();
+        };
+
+    </script>
+</body>
+</html>
